@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ksp-navy: #0b2c4a;
+  --ksp-yellow: #ffd400;
+  --ksp-red: #b10000;
+  --ksp-yellow-soft: #fff3b0;
+  --ksp-yellow-border: rgba(255, 212, 0, 0.55);
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #fafafa;
+  color: var(--ksp-navy);
+}

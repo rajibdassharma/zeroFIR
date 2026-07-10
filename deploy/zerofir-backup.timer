@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily MySQL backup of zerofir at 02:15 IST
+# Staggered 15 min after CyberFraud's 02:00 backup so they don't collide.
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 Asia/Kolkata
+Persistent=true
+RandomizedDelaySec=5min
+Unit=zerofir-backup.service
+
+[Install]
+WantedBy=timers.target

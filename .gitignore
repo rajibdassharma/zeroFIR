@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+frontend/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Environment / secrets — NEVER commit
+**/.env
+**/.env.local
+**/.env.*.local
+**/seed_credentials_*.csv
+**/*_passwords_*.xlsx
+**/*_passwords_*.csv
+
+# zeroFIR runtime data — never commit real filings / photos / attachments
+backend/uploads/
+proddata/
+
+# Backups
+backups/
+*.sql.gz
+*.sql
+
+# Editor / OS
+.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
