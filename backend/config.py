@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # ── Docs ────────────────────────────────────────────────────────
     DISABLE_DOCS: bool = False
 
+    # ── NCRP integration (API 1) ────────────────────────────────────
+    # Shared static API key. NCRP sends `X-API-Key: <key>` on POST
+    # /api/v1/ncrp/complaints. Empty string DISABLES the endpoint
+    # (returns 503) so the receiver never runs unauthenticated. On
+    # prod, set this to a strong random value and rotate via .env.
+    NCRP_API_KEY: str = ""
+
     class Config:
         env_prefix = "ZFIR_"
         env_file = ".env"

@@ -1,6 +1,11 @@
 # Implementation Plan — zeroFIR
 
-## Project Status: Phase 0 in progress (2026-07-08)
+## Project Status: Phase 1a code complete — awaiting local verification (2026-07-10)
+
+Phase 0 landed 2026-07-08 (commit `d0b80dc`). Phase 1 scope locked
+2026-07-10 after user shared the NCRP→zeroFIR→V2 process flow and
+the V2 FIR entry screens. Phase 1 splits into three sub-phases so
+we ship end-to-end value quickly.
 
 Fresh green-field. Tech stack, deploy shape, and UI/UX carried over
 from CyberFraud verbatim per kickoff decision (2026-07-08). Domain
@@ -13,13 +18,12 @@ after the user provides the detailed spec.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Scaffolding — backend + frontend + deploy skeleton | in progress |
-| 1 | Master data + role model + login (per user spec) | pending spec |
-| 2 | Zero FIR registration form + list + edit | pending spec |
-| 3 | Transfer workflow + acknowledgement | pending spec |
-| 4 | Copy marking + notifications | pending spec |
-| 5 | Dashboard + reports (PDF) | pending spec |
-| 6 | Production hardening + VAPT | pending spec |
+| 0 | Scaffolding — backend + frontend + deploy skeleton | ✓ (2026-07-08 `d0b80dc`) |
+| 1a | Master data + NCRP ingestion (API 1 receiver) + Masking App shell (Complaints inbox + detail view) | code complete — awaiting local verification |
+| 1b | Full FIR entry form (15 sections + child tables), threshold + jurisdiction auto-decisions, save-as-draft, e-pen/thumb capture, API 2 push | pending |
+| 1c | API 3 pull (Notice + Lien), API 5 push (registered FIR), status transitions, transfer-to-CRIMAC path | pending |
+| 2 | Dashboards + reports (PDF) — per-PS Zero FIR counts, threshold breakdowns, transfer SLA aging | pending |
+| 3 | Production hardening + VAPT | pending |
 
 Each phase = one focused PR. Phase 1 unblocks when the user provides:
 - Final role list (or confirms CyberFraud shape).

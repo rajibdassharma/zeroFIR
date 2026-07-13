@@ -6,7 +6,7 @@ provide the final role list in Phase 1; that update will edit
 `VALID_ROLES` here plus add the `require_role(...)` dependencies in
 `api/deps.py`, plus adjust seeding.
 """
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, func
 
 from database import Base
 
@@ -33,9 +33,9 @@ class User(Base):
     role = Column(String(40), nullable=False)
 
     # Per-PS scoping (nullable — super_admin doesn't belong to a PS).
-    # Phase 1 will add FKs to units + police_stations once those tables land.
-    unit_id = Column(Integer, nullable=True)
-    ps_id = Column(Integer, nullable=True)
+    # FKs land in migration 001 alongside districts + police_stations.
+    unit_id = Column(Integer, ForeignKey("districts.id"), nullable=True)
+    ps_id = Column(Integer, ForeignKey("police_stations.id"), nullable=True)
 
     is_active = Column(Boolean, default=True, nullable=False)
     must_change_password = Column(Boolean, default=True, nullable=False, server_default="1")
