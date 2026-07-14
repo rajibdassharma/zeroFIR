@@ -13,8 +13,9 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.routes_auth import router as auth_router
+from api.routes_complaints import router as complaints_router
 from api.routes_health import router as health_router
-from api.routes_masked import router as masked_router
+from api.routes_case import router as case_router
 from api.routes_ncrp import router as ncrp_router
 from api.routes_public import router as public_router
 from config import settings
@@ -93,7 +94,8 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(public_router)
 app.include_router(ncrp_router)
-app.include_router(masked_router)
+app.include_router(complaints_router)
+app.include_router(case_router)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,12 @@
-"""Phase 0 seed — creates the DB (if missing), all tables, and one
-bootstrap super_admin so the login flow can be exercised end-to-end
-before Phase 1's real master-data seed lands.
+"""Seed script — wipes + recreates the schema and provisions the
+initial user roster.
+
+State as of 2026-07-13:
+- 44 CEN Police Stations (reference data only — no district scoping,
+  no PS-user accounts).
+- 40 Call-Centre operators (the only human users). Each gets a fresh
+  16-char strong password written to a timestamped CSV. Distribute
+  per operator, then delete.
 
 Usage:
   python seed.py               # asks for confirmation before dropping
@@ -23,10 +29,9 @@ from auth.security import hash_password
 from config import settings
 from database import Base, engine, async_session
 import models  # noqa: F401 — registers all models on Base.metadata
-from models.district import District
 from models.police_station import PoliceStation
 from models.user import User
-from seed_data import CEN_POLICE_STATIONS, DISTRICTS
+from seed_data import CEN_POLICE_STATIONS
 
 
 _PWD_CHARS_LOWER = string.ascii_lowercase
@@ -82,66 +87,53 @@ async def seed(fresh: bool):
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session() as session:
-        # ── 1. Districts ──────────────────────────────────────────
-        print(f"Seeding {len(DISTRICTS)} districts ...")
-        district_by_name: dict[str, District] = {}
-        for name, code in DISTRICTS:
-            d = District(name=name, code=code, is_active=True)
-            session.add(d)
-            district_by_name[name] = d
-        await session.flush()   # populates d.id for each row
-
-        # ── 2. Police Stations ─────────────────────────────────────
+        # ── 1. Police Stations (reference data) ───────────────────
         print(f"Seeding {len(CEN_POLICE_STATIONS)} CEN police stations ...")
-        ps_by_code: dict[str, PoliceStation] = {}
-        for ps_name, ps_code, district_name in CEN_POLICE_STATIONS:
-            district = district_by_name.get(district_name)
-            if district is None:
-                raise RuntimeError(
-                    f"Seed data error: PS '{ps_name}' references unknown "
-                    f"district '{district_name}'. Fix seed_data.py."
-                )
-            ps = PoliceStation(
+        for ps_name, ps_code, _district_name in CEN_POLICE_STATIONS:
+            session.add(PoliceStation(
                 name=ps_name,
                 code=ps_code,
-                district_id=district.id,
                 is_active=True,
-            )
-            session.add(ps)
-            ps_by_code[ps_code] = ps
+            ))
         await session.flush()
 
-        # ── 3. Bootstrap super_admin ──────────────────────────────
-        creds: list[tuple[str, str, str, str]] = []   # (username, pwd, role, ps_code)
-        super_pwd = generate_strong_password()
-        session.add(User(
-            username="super_admin",
-            hashed_password=hash_password(super_pwd),
-            full_name="System Bootstrap Admin",
-            role="super_admin",
-            is_active=True,
-            must_change_password=True,
-        ))
-        creds.append(("super_admin", super_pwd, "super_admin", ""))
-
-        # ── 4. One placeholder `admin` user per CEN PS ────────────
-        # Gives every PS a working login on day one. Real users get
-        # provisioned by the super_admin from the UI in Phase 1b.
-        print(f"Seeding {len(ps_by_code)} PS admin users ...")
-        for ps_code, ps in ps_by_code.items():
-            username = f"admin_{ps_code.lower().replace('-', '_')}"
+        # ── 2. Call-Centre operators (only human role) ────────────
+        # Centralised call-centre — 40 operators handle all Karnataka
+        # complaints. No super_admin, no PS-user accounts (2026-07-13
+        # scope decision).
+        creds: list[tuple[str, str, str]] = []   # (username, password, role)
+        CC_COUNT = 40
+        print(f"Seeding {CC_COUNT} Call-Centre operators ...")
+        for i in range(1, CC_COUNT + 1):
+            username = f"cc_operator_{i:02d}"
             pwd = generate_strong_password()
             session.add(User(
                 username=username,
                 hashed_password=hash_password(pwd),
-                full_name=f"{ps.name} Admin",
-                role="admin",
-                unit_id=ps.district_id,
-                ps_id=ps.id,
+                full_name=f"Call-Centre Operator {i:02d}",
+                role="call_center",
                 is_active=True,
                 must_change_password=True,
             ))
-            creds.append((username, pwd, "admin", ps_code))
+            creds.append((username, pwd, "call_center"))
+
+        # ── 3. TEST USER (dev convenience) ────────────────────────
+        # Fixed-credentials account for local exploration so you can
+        # skip pulling a password from the CSV every reset. REMOVE
+        # THIS BLOCK before deploying to production — a static
+        # credential in seed code is a security incident waiting to
+        # happen.
+        TEST_USER = "test_user"
+        TEST_PWD = "TestUser@2026"
+        session.add(User(
+            username=TEST_USER,
+            hashed_password=hash_password(TEST_PWD),
+            full_name="Test User (dev only)",
+            role="call_center",
+            is_active=True,
+            must_change_password=False,   # skip the change-password gate for tests
+        ))
+        creds.append((TEST_USER, TEST_PWD, "call_center"))
 
         await session.commit()
 
@@ -149,15 +141,19 @@ async def seed(fresh: bool):
         creds_path = Path(__file__).parent / f"seed_credentials_bootstrap_{stamp}.csv"
         with creds_path.open("w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["username", "password", "role", "ps_code", "must_change_on_first_login"])
+            w.writerow(["username", "password", "role", "must_change_on_first_login"])
             for row in creds:
                 w.writerow([*row, "yes"])
 
         print("=" * 70)
-        print(f"  Seeded {len(DISTRICTS)} districts + {len(ps_by_code)} PSes.")
+        print(f"  Seeded {len(CEN_POLICE_STATIONS)} CEN PSes (reference data).")
+        print(f"  Seeded {CC_COUNT} Call-Centre operators.")
         print(f"  Bootstrap credentials → {creds_path}")
-        print("  DISTRIBUTE SECURELY per PS, then DELETE this file.")
+        print("  DISTRIBUTE SECURELY to each operator, then DELETE this file.")
         print("  Every user MUST change password on first login.")
+        print("-" * 70)
+        print(f"  TEST USER (dev only): {TEST_USER} / {TEST_PWD}")
+        print("  ★ Remove the TEST USER block from seed.py before going to prod.")
         print("=" * 70)
 
     await engine.dispose()

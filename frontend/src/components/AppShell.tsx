@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
+import kspLogo from '../assets/ksp_logo.png';
 import { setToken } from '../lib/api/client';
 import { useAuth } from '../lib/stores/auth-store';
 
@@ -22,9 +23,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="flex items-center justify-between px-6 py-3"
         style={{ background: 'var(--ksp-navy)', color: '#fff' }}
       >
-        <Link to="/complaints" className="flex items-baseline gap-3">
-          <span className="text-xl font-bold">zeroFIR</span>
-          <span className="text-xs opacity-80">Masking Application</span>
+        <Link to="/complaints" className="flex items-center gap-3">
+          <span
+            className="inline-flex items-center justify-center rounded-lg p-1"
+            style={{ background: 'rgba(255,255,255,0.9)' }}
+          >
+            <img src={kspLogo} alt="KSP Logo" className="w-9 h-9 object-contain" />
+          </span>
+          <span className="flex flex-col leading-tight">
+            <span className="text-xl font-bold">zeroFIR</span>
+            <span className="text-xs opacity-80">Masking Application · Karnataka State Police</span>
+          </span>
         </Link>
         <nav className="flex items-center gap-4 text-sm">
           <Link to="/complaints" className="hover:underline">Complaints</Link>

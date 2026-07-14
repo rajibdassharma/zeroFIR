@@ -1,6 +1,6 @@
 # Implementation Plan — zeroFIR
 
-## Project Status: Phase 1a code complete — awaiting local verification (2026-07-10)
+## Project Status: Phase 1b.1 code complete — awaiting local verification (2026-07-13)
 
 Phase 0 landed 2026-07-08 (commit `d0b80dc`). Phase 1 scope locked
 2026-07-10 after user shared the NCRP→zeroFIR→V2 process flow and
@@ -19,9 +19,11 @@ after the user provides the detailed spec.
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Scaffolding — backend + frontend + deploy skeleton | ✓ (2026-07-08 `d0b80dc`) |
-| 1a | Master data + NCRP ingestion (API 1 receiver) + Masking App shell (Complaints inbox + detail view) | code complete — awaiting local verification |
-| 1b | Full FIR entry form (15 sections + child tables), threshold + jurisdiction auto-decisions, save-as-draft, e-pen/thumb capture, API 2 push | pending |
-| 1c | API 3 pull (Notice + Lien), API 5 push (registered FIR), status transitions, transfer-to-CRIMAC path | pending |
+| 1a | Master data + NCRP ingestion (API 1 receiver) + Masking App shell (Complaints inbox + detail view) | ✓ pushed 2026-07-10 (8f28e08) |
+| 1b.1 | Save-as-draft FIR entry — sections 1 (PS Details), 2 (Summary), 3 (Acts & Sections), 4 (Time), 5 (Place), 6 (Complainant); tabbed form mirroring CyberFraud CaseEntryPage | code complete — awaiting local verification |
+| 1b.2 | Sections 7 (Accused), 8 (Victims), 9 (Property) — repeating child grids with drill-in | pending |
+| 1b.3 | Sections 10 (Action Taken), 11 (Signature), 14 (Other Details) + threshold + jurisdiction auto-decisions + final submit path + API 2 push | pending |
+| 1c | API 3 pull (Notice + Lien), API 5 push (registered FIR), sections 12/13/15 (dispatch/PC-HC/SHO signature), transfer-to-CRIMAC path | pending |
 | 2 | Dashboards + reports (PDF) — per-PS Zero FIR counts, threshold breakdowns, transfer SLA aging | pending |
 | 3 | Production hardening + VAPT | pending |
 

@@ -1,25 +1,33 @@
 """Import every model here so Base.metadata knows about all tables.
 
-Never remove entries. Migration authors reference Base.metadata for
-schema inspection, and seed.py's Base.metadata.create_all needs all
-models registered.
+Two main outbound tables (both keyed on `acknowledgement_no`):
+  - `ncrp_data`           → outbound to NCRP (APIs 2 / 5)
+  - `police_it_v2_data`   → outbound to Police IT V2 for FIR creation
+
+Plus child tables for normalization and reference lookups.
 """
-from models.district import District
 from models.police_station import PoliceStation
 from models.user import User
-from models.ncrp_complaint import NcrpComplaint
+
+# ── NCRP outbound side ──────────────────────────────────────────
+from models.ncrp_data import NcrpData
 from models.ncrp_transaction import NcrpTransaction
 from models.ncrp_suspect_mobile import NcrpSuspectMobile
+from models.ncrp_suspect_account import NcrpSuspectAccount
 from models.ncrp_efir_answer import NcrpEfirAnswer
-from models.masked_application import MaskedApplication
+
+# ── Police IT V2 outbound side ──────────────────────────────────
+from models.police_it_v2_data import PoliceITV2Data
+from models.police_it_v2_act import PoliceITV2Act
 
 __all__ = [
-    "District",
     "PoliceStation",
     "User",
-    "NcrpComplaint",
+    "NcrpData",
     "NcrpTransaction",
     "NcrpSuspectMobile",
+    "NcrpSuspectAccount",
     "NcrpEfirAnswer",
-    "MaskedApplication",
+    "PoliceITV2Data",
+    "PoliceITV2Act",
 ]

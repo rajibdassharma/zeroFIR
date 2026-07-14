@@ -1,9 +1,6 @@
 """NcrpSuspectMobile — one row per suspect mobile number NCRP captured.
 
-NCRP screen 1 has an "Add" button next to Suspect Mobile No, so the
-complaint can carry 0..n suspect mobiles. Kept as a separate table
-(rather than a JSON array on ncrp_complaints) so future analytics can
-group cases by shared suspect numbers.
+Parent: `ncrp_data` (FK on `acknowledgement_no`).
 """
 import uuid
 
@@ -16,9 +13,9 @@ class NcrpSuspectMobile(Base):
     __tablename__ = "ncrp_suspect_mobiles"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    complaint_id = Column(
-        String(36),
-        ForeignKey("ncrp_complaints.id", ondelete="CASCADE"),
+    acknowledgement_no = Column(
+        String(60),
+        ForeignKey("ncrp_data.acknowledgement_no", ondelete="CASCADE"),
         nullable=False,
     )
     mobile = Column(String(20), nullable=False)

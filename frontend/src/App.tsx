@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router';
 import { RequireAuth } from './components/RequireAuth';
 import { ComplaintsListPage } from './pages/ComplaintsListPage';
+import { FirEntryPage } from './pages/FirEntryPage';
 import { LoginPage } from './pages/LoginPage';
 import { MaskingApplicationPage } from './pages/MaskingApplicationPage';
+import { NcrpEntryPage } from './pages/NcrpEntryPage';
 
 export function App() {
   return (
@@ -18,14 +20,37 @@ export function App() {
         }
       />
       <Route
-        path="/complaints/:id"
+        path="/complaints/new"
+        element={
+          <RequireAuth>
+            <NcrpEntryPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/complaints/:ackNo/ncrp"
+        element={
+          <RequireAuth>
+            <NcrpEntryPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/complaints/:ackNo"
         element={
           <RequireAuth>
             <MaskingApplicationPage />
           </RequireAuth>
         }
       />
-      {/* Phase 1b: /complaints/:id/fir-entry (editable 15-section form) */}
+      <Route
+        path="/complaints/:ackNo/fir-entry"
+        element={
+          <RequireAuth>
+            <FirEntryPage />
+          </RequireAuth>
+        }
+      />
       {/* Phase 1c: /dashboards, /reports */}
     </Routes>
   );

@@ -2,30 +2,24 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { AppShell } from '../components/AppShell';
-import { getMaskedApplication } from '../lib/api/masking';
-import type { MaskedApplicationDetail } from '../types';
+import { getComplaint } from '../lib/api/masking';
+import type { ComplaintDetail } from '../types';
 
-/** Two-section screen:
- *   TOP    — read-only NCRP data (what API 1 delivered)
- *   BOTTOM — Masking Application status + FIR entry stub
- *
- *  Phase 1a shows the full read-only NCRP view. The FIR entry form
- *  (15 sections) lands in Phase 1b — a placeholder card sits there
- *  now so the layout is stable when it arrives.
- */
+/** Detail view — the two outbound bundles side by side + workflow
+ *  status. Keyed on the URL param `:ackNo` (acknowledgement_no). */
 export function MaskingApplicationPage() {
-  const { id } = useParams<{ id: string }>();
-  const [data, setData] = useState<MaskedApplicationDetail | null>(null);
+  const { ackNo } = useParams<{ ackNo: string }>();
+  const [data, setData] = useState<ComplaintDetail | null>(null);
   const [busy, setBusy] = useState(true);
 
   useEffect(() => {
-    if (!id) return;
+    if (!ackNo) return;
     setBusy(true);
-    getMaskedApplication(id)
+    getComplaint(ackNo)
       .then(setData)
       .catch((e) => toast.error(e.message))
       .finally(() => setBusy(false));
-  }, [id]);
+  }, [ackNo]);
 
   if (busy) {
     return <AppShell><div className="text-center py-10 italic">Loading…</div></AppShell>;
@@ -41,7 +35,8 @@ export function MaskingApplicationPage() {
     );
   }
 
-  const c = data.complaint;
+  const c = data.ncrp_data;
+  const ackPath = encodeURIComponent(data.acknowledgement_no);
 
   return (
     <AppShell>
@@ -62,12 +57,18 @@ export function MaskingApplicationPage() {
           </span>
         </div>
 
-        {/* ── SECTION 1: NCRP DATA (READ-ONLY) ────────────────── */}
+        {/* ── SECTION 1: NCRP DATA ────────────────────────────── */}
         <section className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
-          <h2 className="text-lg font-bold border-b pb-2"
-            style={{ color: 'var(--ksp-navy)' }}>
-            NCRP Data (read-only)
-          </h2>
+          <div className="flex items-center justify-between border-b pb-2">
+            <h2 className="text-lg font-bold" style={{ color: 'var(--ksp-navy)' }}>
+              NCRP Data
+            </h2>
+            <Link to={`/complaints/${ackPath}/ncrp`}
+              className="px-3 py-1.5 text-xs font-bold rounded-lg"
+              style={{ background: 'var(--ksp-navy)', color: 'var(--ksp-yellow)', border: '2px solid rgba(0,0,0,0.25)' }}>
+              Edit NCRP Data
+            </Link>
+          </div>
 
           <div className="grid grid-cols-2 gap-4 text-sm">
             <Row label="Category" value={c.category} />
@@ -96,7 +97,7 @@ export function MaskingApplicationPage() {
 
           <div>
             <h3 className="font-semibold text-sm mt-2 mb-1">Incident</h3>
-            <p className="text-sm"><b>When:</b> {c.incident_occurred_at ?? '—'}</p>
+            <p className="text-sm"><b>Where:</b> {c.incident_place ?? '—'}</p>
             <p className="text-sm whitespace-pre-wrap">
               <b>Additional info:</b> {c.additional_information ?? '—'}
             </p>
@@ -139,6 +140,44 @@ export function MaskingApplicationPage() {
             </div>
           )}
 
+          {c.has_suspect_account_details && (
+            <div>
+              <h3 className="font-semibold text-sm mt-2 mb-1">Suspect Accounts</h3>
+              {c.suspect_accounts.length === 0 ? (
+                <p className="text-sm italic opacity-60">
+                  Caller confirmed they have suspect account details but none captured yet.
+                </p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead style={{ background: '#eee' }}>
+                    <tr>
+                      <th className="px-2 py-1 text-left">Bank / Wallet</th>
+                      <th className="px-2 py-1 text-left">Account / UPI</th>
+                      <th className="px-2 py-1 text-left">IFSC</th>
+                      <th className="px-2 py-1 text-left">Holder</th>
+                      <th className="px-2 py-1 text-right">Amount (₹)</th>
+                      <th className="px-2 py-1 text-left">Credited</th>
+                      <th className="px-2 py-1 text-left">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {c.suspect_accounts.map((sa) => (
+                      <tr key={sa.id} className="border-t">
+                        <td className="px-2 py-1">{sa.bank_wallet ?? '—'}</td>
+                        <td className="px-2 py-1">{sa.account_id ?? '—'}</td>
+                        <td className="px-2 py-1">{sa.ifsc_code ?? '—'}</td>
+                        <td className="px-2 py-1">{sa.account_holder_name ?? '—'}</td>
+                        <td className="px-2 py-1 text-right">{sa.amount_credited ?? '—'}</td>
+                        <td className="px-2 py-1">{sa.credited_on ?? '—'}</td>
+                        <td className="px-2 py-1">{sa.remarks ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
           {c.efir_answers.length > 0 && (
             <div>
               <h3 className="font-semibold text-sm mt-2 mb-1">e-FIR questionnaire</h3>
@@ -168,10 +207,18 @@ export function MaskingApplicationPage() {
             <Row label="Picked up at" value={data.picked_up_at} />
           </div>
 
-          <div className="mt-4 p-4 rounded-lg text-sm"
+          <div className="mt-4 flex items-center justify-between p-4 rounded-lg"
             style={{ background: '#fff7d6', border: '1px dashed var(--ksp-yellow)' }}>
-            <b>FIR entry (15 sections)</b> — this editable form lands in
-            Phase 1b. In this phase you can only review NCRP data.
+            <div className="text-sm">
+              <b>FIR entry</b> — sections 1-6 are live now (PS details,
+              summary, acts, time, place, complainant). Sections 7-15
+              land in Phase 1b.2 / 1b.3.
+            </div>
+            <Link to={`/complaints/${ackPath}/fir-entry`}
+              className="px-4 py-2 text-sm font-bold rounded-xl"
+              style={{ background: 'var(--ksp-navy)', color: 'var(--ksp-yellow)', border: '2px solid rgba(0,0,0,0.25)' }}>
+              Open FIR Entry →
+            </Link>
           </div>
         </section>
       </div>

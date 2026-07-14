@@ -35,6 +35,18 @@ class NcrpEfirAnswerPayload(BaseModel):
     answer: bool
 
 
+class NcrpSuspectAccountPayload(BaseModel):
+    """NCRP Screen 2 — reveals when the caller toggles 'Do You have
+    Suspect Account Details?' to Yes."""
+    bank_wallet: str | None = Field(default=None, max_length=150)
+    account_id: str | None = Field(default=None, max_length=60)
+    ifsc_code: str | None = Field(default=None, max_length=20)
+    account_holder_name: str | None = Field(default=None, max_length=200)
+    amount_credited: Decimal | None = None
+    credited_on: date | None = None
+    remarks: str | None = Field(default=None, max_length=500)
+
+
 class NcrpAddressPayload(BaseModel):
     house_no: str | None = None
     street: str | None = None
@@ -71,19 +83,26 @@ class NcrpComplaintPushRequest(BaseModel):
     complainant: NcrpComplainantPayload
     address: NcrpAddressPayload
 
-    incident_occurred_at: str | None = None
+    # NCRP Screen 1 "Where did the incident occur?" — value picked
+    # from the incident_place dropdown (see seed_data.py).
+    incident_place: str | None = Field(default=None, max_length=120)
     additional_information: str | None = Field(default=None, max_length=500)
+
+    has_suspect_account_details: bool = False
 
     suspect_mobiles: List[str] = []
     transactions: List[NcrpTransactionPayload] = []
+    suspect_accounts: List[NcrpSuspectAccountPayload] = []
     efir_answers: List[NcrpEfirAnswerPayload] = []
 
 
 class NcrpComplaintPushResponse(BaseModel):
-    """Ack we send back to NCRP. Includes our own complaint id so
-    NCRP can correlate later API 2 / API 5 traffic."""
+    """Ack we send back to NCRP. `acknowledgement_no` is the PK of
+    both `ncrp_data` and `police_it_v2_data` — that's the correlator
+    for future API 2 / 3 / 5 traffic and for the frontend's follow-up
+    PATCH to `/api/v1/complaints/{ack_no}/v2-draft`."""
     ok: bool = True
-    complaint_id: str
+    acknowledgement_no: str
     ps_id: int | None = None
     ps_matched: bool = False
     duplicate: bool = False

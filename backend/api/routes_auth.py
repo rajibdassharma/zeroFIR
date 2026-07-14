@@ -24,11 +24,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     if user is None or not user.is_active or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    token = create_token(
-        user_id=user.id,
-        role=user.role,
-        extra={"unit_id": user.unit_id, "ps_id": user.ps_id},
-    )
+    token = create_token(user_id=user.id, role=user.role)
     return LoginResponse(
         token=token,
         role=user.role,
@@ -53,6 +49,4 @@ async def me(
         username=user.username,
         role=user.role,
         full_name=user.full_name,
-        unit_id=user.unit_id,
-        ps_id=user.ps_id,
     )

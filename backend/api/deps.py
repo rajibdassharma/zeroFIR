@@ -15,8 +15,6 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class CurrentUser:
     user_id: int
     role: str
-    unit_id: int | None = None
-    ps_id: int | None = None
 
 
 def _extract_user(credentials: HTTPAuthorizationCredentials | None) -> CurrentUser:
@@ -27,14 +25,7 @@ def _extract_user(credentials: HTTPAuthorizationCredentials | None) -> CurrentUs
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     try:
-        unit_raw = payload.get("unit_id")
-        ps_raw = payload.get("ps_id")
-        return CurrentUser(
-            user_id=int(payload["sub"]),
-            role=payload["role"],
-            unit_id=int(unit_raw) if unit_raw is not None else None,
-            ps_id=int(ps_raw) if ps_raw is not None else None,
-        )
+        return CurrentUser(user_id=int(payload["sub"]), role=payload["role"])
     except (KeyError, ValueError, TypeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Malformed token")
 

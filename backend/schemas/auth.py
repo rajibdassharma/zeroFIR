@@ -19,5 +19,3 @@ class MeResponse(BaseModel):
     username: str
     role: str
     full_name: str | None = None
-    unit_id: int | None = None
-    ps_id: int | None = None

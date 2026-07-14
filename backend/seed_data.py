@@ -112,3 +112,137 @@ CEN_POLICE_STATIONS: Sequence[tuple[str, str, str]] = (
     ("Yadgir CEN PS", "YDG-CEN", "Yadgir"),
     ("KSP CID Cyber Crime CEN PS", "CID-CEN", "Bengaluru City"),
 )
+
+
+# ── Acts & Sections master (Phase 1b.1) ──────────────────────────
+# Static list — the officer picks an act from this dropdown in FIR
+# entry Section 3, then enters the applicable sections as free text
+# (e.g. "318(4), 319, 340"). Not stored in a DB table (yet) — served
+# via GET /api/v1/fir-master/acts/public. Add new codes here when
+# statutes change.
+
+ACTS_MASTER: tuple[tuple[str, str], ...] = (
+    ("BNS",   "Bharatiya Nyaya Sanhita, 2023"),
+    ("BNSS",  "Bharatiya Nagarik Suraksha Sanhita, 2023"),
+    ("BSA",   "Bharatiya Sakshya Adhiniyam, 2023"),
+    ("IT",    "Information Technology Act, 2000"),
+    ("IPC",   "Indian Penal Code, 1860 (legacy)"),
+    ("CrPC",  "Code of Criminal Procedure, 1973 (legacy)"),
+    ("NDPS",  "Narcotic Drugs and Psychotropic Substances Act, 1985"),
+    ("Other", "Other / Special Act"),
+)
+
+
+# ── Fixed dropdown lists (used by FIR entry sections) ────────────
+
+MODE_OF_COMPLAINT_OPTIONS: tuple[str, ...] = (
+    "Written", "Oral", "Phone", "Email", "NCRP", "1930 Helpline", "Walk-In", "Other",
+)
+
+FIR_CASE_TYPE_OPTIONS: tuple[str, ...] = (
+    "Fresh", "Supplementary", "Re-registration",
+)
+
+OFFENCE_TYPE_OPTIONS: tuple[str, ...] = (
+    "Cognisable", "Non-cognisable",
+)
+
+GRAVITY_OPTIONS: tuple[str, ...] = (
+    "Major", "Minor", "Petty",
+)
+
+DIRECTION_OPTIONS: tuple[str, ...] = (
+    "N", "NE", "E", "SE", "S", "SW", "W", "NW",
+)
+
+UID_TYPE_OPTIONS: tuple[str, ...] = (
+    "Aadhaar", "PAN", "Passport", "Voter ID", "Driving Licence", "Other",
+)
+
+RELATION_TO_VICTIM_OPTIONS: tuple[str, ...] = (
+    "Self", "Father", "Mother", "Spouse", "Son", "Daughter",
+    "Brother", "Sister", "Guardian", "Friend", "Colleague", "Other",
+)
+
+COMPLAINANT_ROLE_OPTIONS: tuple[str, ...] = (
+    "victim", "eye_witness", "police_officer", "informant_third_party",
+)
+
+RELIGION_OPTIONS: tuple[str, ...] = (
+    "Hindu", "Muslim", "Christian", "Sikh", "Buddhist", "Jain",
+    "Parsi", "Jewish", "Other", "Prefer not to say",
+)
+
+CASTE_OPTIONS: tuple[str, ...] = (
+    "SC (Scheduled Caste)",
+    "ST (Scheduled Tribe)",
+    "OBC (Other Backward Class)",
+    "General",
+    "Other",
+    "Prefer not to say",
+)
+
+
+# Crime classification (FIR entry Section 3 "Crime Classification").
+# NCRB CCTNS heads — trimmed to what a KA CEN PS actually files under.
+# Update these lists when SCRB publishes a new head/minor breakdown.
+
+CRIME_MAJOR_HEAD_OPTIONS: tuple[str, ...] = (
+    "Cyber Crime — Financial",
+    "Cyber Crime — Non-Financial",
+    "Cyber Crime — Economic Offence",
+    "IPC / BNS Crime",
+    "SLL (Special & Local Laws)",
+    "Other",
+)
+
+CRIME_MINOR_HEAD_OPTIONS: tuple[str, ...] = (
+    "Cheating (BNS 318)",
+    "Impersonation (BNS 319)",
+    "Criminal Intimidation (BNS 308)",
+    "Forgery / Fake Document (BNS 340)",
+    "OTP Fraud",
+    "UPI / Wallet Fraud",
+    "IMPS / NEFT Fraud",
+    "Credit / Debit Card Fraud",
+    "Investment / Trading Fraud",
+    "Loan Fraud",
+    "Job Fraud",
+    "Matrimonial Fraud",
+    "Sextortion",
+    "Phishing / Vishing",
+    "Hacking / Data Breach",
+    "Identity Theft",
+    "Cryptocurrency Fraud",
+    "Other",
+)
+
+
+# NCRP Screen 1 "Where did the incident occur?" dropdown values.
+# Kept short — the FIR entry section 5 (Place of Incident) captures
+# structured address; this is the intake-time coarse category.
+INCIDENT_PLACE_OPTIONS: tuple[str, ...] = (
+    "Own residence / Home",
+    "Office / Workplace",
+    "Bank / ATM",
+    "Public place",
+    "Cyber cafe",
+    "Online — Fraud call / SMS",
+    "Online — Social media",
+    "Online — Email",
+    "Online — Website / App",
+    "Other",
+)
+
+
+INDIAN_STATES: tuple[str, ...] = (
+    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+    "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+    "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
+    "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+    "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+    "Uttar Pradesh", "Uttarakhand", "West Bengal",
+    "Andaman and Nicobar Islands", "Chandigarh",
+    "Dadra and Nagar Haveli and Daman and Diu", "Delhi",
+    "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
+)

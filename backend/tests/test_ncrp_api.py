@@ -1,18 +1,17 @@
 """API 1 (NCRP → zeroFIR) receive-endpoint tests.
 
 Uses aiosqlite so the suite runs without MySQL. Same shape as the
-Phase 0 tests — ASGI transport, no live server. `raw_payload` uses
-SQLAlchemy's cross-dialect JSON type so it round-trips on SQLite.
+Phase 0 tests — ASGI transport, no live server.
 
 Coverage:
-  1. Missing X-API-Key → 401
-  2. Wrong X-API-Key → 401
-  3. Server config missing key → 503
-  4. Happy path: complaint normalises + auto-creates Masking App
-     when PS name matches.
-  5. Unknown PS name → complaint stored, ps_id=NULL, no Masking App
-     yet.
-  6. Duplicate acknowledgement_no → 200, duplicate=True, no new row.
+  1. Missing X-API-Key                                   → 401
+  2. Wrong X-API-Key                                     → 401
+  3. Server config missing key                           → 503
+  4. Happy path: NCRP data normalises + PoliceITV2Data
+     row auto-seeded when PS name matches               → 200
+  5. Unknown PS name → complaint stored, ps_id=NULL,
+     no PoliceITV2Data row yet                          → 200
+  6. Duplicate acknowledgement_no                        → 200, duplicate=True
 """
 from __future__ import annotations
 
@@ -25,12 +24,11 @@ import database
 from config import settings
 from database import Base, get_db as _original_get_db
 import models  # noqa: F401 — registers all models on Base.metadata
-from models.district import District
-from models.masked_application import MaskedApplication
-from models.ncrp_complaint import NcrpComplaint
+from models.ncrp_data import NcrpData
 from models.ncrp_efir_answer import NcrpEfirAnswer
 from models.ncrp_suspect_mobile import NcrpSuspectMobile
 from models.ncrp_transaction import NcrpTransaction
+from models.police_it_v2_data import PoliceITV2Data
 from models.police_station import PoliceStation
 
 
@@ -66,9 +64,6 @@ async def sqlite_db(monkeypatch):
             else:
                 await session.commit()
 
-    # Routes captured `Depends(get_db)` at import time — they hold a
-    # reference to the ORIGINAL function. Overriding the module attr
-    # wouldn't reach them; the dependency-injection override does.
     from zero_fir import app
     app.dependency_overrides[_original_get_db] = _override_get_db
 
@@ -80,16 +75,10 @@ async def sqlite_db(monkeypatch):
 
 @pytest.fixture
 async def seed_ps(sqlite_db):
-    """Seed one district + one CEN PS so the API 1 happy path has a
-    real target to resolve to."""
     async with sqlite_db() as session:
-        district = District(name="Bengaluru City", code="BLR-C", is_active=True)
-        session.add(district)
-        await session.flush()
         ps = PoliceStation(
             name="Bengaluru City East CEN PS",
             code="BLR-C-E-CEN",
-            district_id=district.id,
             is_active=True,
         )
         session.add(ps)
@@ -103,7 +92,10 @@ def api_key(monkeypatch):
     return API_KEY
 
 
-def sample_payload(ack: str = "30811240050021", ps_name: str = "Bengaluru City East CEN PS") -> dict:
+def sample_payload(
+    ack: str = "30811240050021",
+    ps_name: str = "Bengaluru City East CEN PS",
+) -> dict:
     return {
         "acknowledgement_no": ack,
         "category": "Online Financial Fraud",
@@ -124,24 +116,18 @@ def sample_payload(ack: str = "30811240050021", ps_name: str = "Bengaluru City E
             "police_station": ps_name,
             "pincode": "560001",
         },
-        "incident_occurred_at": "Yesterday between 6-9 PM",
+        "incident_place": "Own residence / Home",
         "additional_information": "Received suspicious call claiming KYC update.",
+        "has_suspect_account_details": False,
         "suspect_mobiles": ["8888888888", "7777777777"],
         "transactions": [
             {
-                "sub_category": "UPI",
-                "bank_wallet": "HDFC",
-                "account_id": "1234567890",
-                "transaction_id": "TXN001",
-                "transaction_date": "2026-07-09",
-                "approx_time": "09:37 PM",
+                "sub_category": "UPI", "bank_wallet": "HDFC",
+                "account_id": "1234567890", "transaction_id": "TXN001",
+                "transaction_date": "2026-07-09", "approx_time": "09:37 PM",
                 "amount": "1050000.00",
             },
-            {
-                "sub_category": "UPI",
-                "bank_wallet": "SBI",
-                "amount": "50000.00",
-            },
+            {"sub_category": "UPI", "bank_wallet": "SBI", "amount": "50000.00"},
         ],
         "efir_answers": [
             {
@@ -183,7 +169,7 @@ async def test_endpoint_disabled_when_key_unset(sqlite_db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_happy_path_normalises_and_creates_masked_app(sqlite_db, seed_ps, api_key):
+async def test_happy_path_seeds_ncrp_and_v2(sqlite_db, seed_ps, api_key):
     r = await _post(sample_payload(), headers={"X-API-Key": API_KEY})
     assert r.status_code == 200, r.text
     body = r.json()
@@ -191,48 +177,45 @@ async def test_happy_path_normalises_and_creates_masked_app(sqlite_db, seed_ps, 
     assert body["ps_matched"] is True
     assert body["ps_id"] == seed_ps
     assert body["duplicate"] is False
-    complaint_id = body["complaint_id"]
+    ack_no = body["acknowledgement_no"]
+    assert ack_no == "30811240050021"
 
     async with sqlite_db() as s:
-        # Complaint row
-        c = (await s.execute(
-            select(NcrpComplaint).where(NcrpComplaint.id == complaint_id)
+        n = (await s.execute(
+            select(NcrpData).where(NcrpData.acknowledgement_no == ack_no)
         )).scalar_one()
-        assert c.acknowledgement_no == "30811240050021"
-        assert c.complainant_name == "Test Complainant"
-        assert c.ps_id == seed_ps
-        assert c.raw_payload["complainant"]["name"] == "Test Complainant"
+        assert n.complainant_name == "Test Complainant"
+        assert n.ps_id == seed_ps
 
-        # Children
-        mobiles_count = (await s.execute(
+        # Children keyed on ack_no.
+        assert (await s.execute(
             select(func.count()).select_from(NcrpSuspectMobile)
-            .where(NcrpSuspectMobile.complaint_id == complaint_id)
-        )).scalar_one()
-        assert mobiles_count == 2
+            .where(NcrpSuspectMobile.acknowledgement_no == ack_no)
+        )).scalar_one() == 2
 
-        txn_count = (await s.execute(
+        assert (await s.execute(
             select(func.count()).select_from(NcrpTransaction)
-            .where(NcrpTransaction.complaint_id == complaint_id)
-        )).scalar_one()
-        assert txn_count == 2
+            .where(NcrpTransaction.acknowledgement_no == ack_no)
+        )).scalar_one() == 2
 
-        ans_count = (await s.execute(
+        assert (await s.execute(
             select(func.count()).select_from(NcrpEfirAnswer)
-            .where(NcrpEfirAnswer.complaint_id == complaint_id)
-        )).scalar_one()
-        assert ans_count == 1
+            .where(NcrpEfirAnswer.acknowledgement_no == ack_no)
+        )).scalar_one() == 1
 
-        # Masking Application auto-created
-        ma = (await s.execute(
-            select(MaskedApplication)
-            .where(MaskedApplication.complaint_id == complaint_id)
+        # PoliceITV2Data row auto-seeded.
+        v2 = (await s.execute(
+            select(PoliceITV2Data).where(PoliceITV2Data.acknowledgement_no == ack_no)
         )).scalar_one()
-        assert ma.status == "RECEIVED"
-        assert ma.ps_id == seed_ps
+        assert v2.status == "RECEIVED"
+        assert v2.ps_id == seed_ps
 
 
 @pytest.mark.asyncio
-async def test_unknown_ps_stores_complaint_without_masked_app(sqlite_db, seed_ps, api_key):
+async def test_unknown_ps_still_seeds_v2_with_null_ps(sqlite_db, seed_ps, api_key):
+    """Even when the PS name doesn't resolve, we still seed a V2 row
+    (with ps_id = NULL) so the workflow has a home and the operator
+    can fix the PS on the /complaints/{ack_no}/v2-draft edit."""
     payload = sample_payload(ps_name="Nowhere CEN PS")
     r = await _post(payload, headers={"X-API-Key": API_KEY})
     assert r.status_code == 200
@@ -240,34 +223,32 @@ async def test_unknown_ps_stores_complaint_without_masked_app(sqlite_db, seed_ps
     assert body["ps_matched"] is False
     assert body["ps_id"] is None
 
+    ack_no = body["acknowledgement_no"]
     async with sqlite_db() as s:
-        c = (await s.execute(
-            select(NcrpComplaint).where(NcrpComplaint.id == body["complaint_id"])
+        n = (await s.execute(
+            select(NcrpData).where(NcrpData.acknowledgement_no == ack_no)
         )).scalar_one()
-        assert c.ps_id is None
+        assert n.ps_id is None
 
-        ma_count = (await s.execute(
-            select(func.count()).select_from(MaskedApplication)
-            .where(MaskedApplication.complaint_id == body["complaint_id"])
+        v2 = (await s.execute(
+            select(PoliceITV2Data).where(PoliceITV2Data.acknowledgement_no == ack_no)
         )).scalar_one()
-        assert ma_count == 0
+        assert v2.ps_id is None
+        assert v2.status == "RECEIVED"
 
 
 @pytest.mark.asyncio
 async def test_duplicate_ack_no_returns_existing(sqlite_db, seed_ps, api_key):
     r1 = await _post(sample_payload(), headers={"X-API-Key": API_KEY})
     assert r1.status_code == 200
-    complaint_id_1 = r1.json()["complaint_id"]
+    ack_no_1 = r1.json()["acknowledgement_no"]
 
     r2 = await _post(sample_payload(), headers={"X-API-Key": API_KEY})
     assert r2.status_code == 200
     body = r2.json()
     assert body["duplicate"] is True
-    assert body["complaint_id"] == complaint_id_1
+    assert body["acknowledgement_no"] == ack_no_1
 
-    # Table should still hold exactly one complaint row.
     async with sqlite_db() as s:
-        n = (await s.execute(
-            select(func.count()).select_from(NcrpComplaint)
-        )).scalar_one()
+        n = (await s.execute(select(func.count()).select_from(NcrpData))).scalar_one()
         assert n == 1

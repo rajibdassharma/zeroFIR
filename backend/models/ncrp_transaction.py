@@ -1,12 +1,13 @@
 """NcrpTransaction — one row per victim-account debit reported to NCRP.
 
+Parent: `ncrp_data` (FK on `acknowledgement_no`).
+
 A single complaint typically lists multiple transactions across
-different bank / wallet / UPI accounts. All display on the read-only
-"Debited Transaction Details" table in the Masking App.
+different bank / wallet / UPI accounts.
 """
 import uuid
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Numeric, String, func
 
 from database import Base
 
@@ -15,9 +16,9 @@ class NcrpTransaction(Base):
     __tablename__ = "ncrp_transactions"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    complaint_id = Column(
-        String(36),
-        ForeignKey("ncrp_complaints.id", ondelete="CASCADE"),
+    acknowledgement_no = Column(
+        String(60),
+        ForeignKey("ncrp_data.acknowledgement_no", ondelete="CASCADE"),
         nullable=False,
     )
 

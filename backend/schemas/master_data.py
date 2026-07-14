@@ -1,20 +1,17 @@
-"""Public schemas for the login dropdown chain."""
+"""Public schemas for the login user dropdown + PS lookup."""
 from pydantic import BaseModel
-
-
-class DistrictPublic(BaseModel):
-    id: int
-    name: str
-
-
-class PoliceStationPublic(BaseModel):
-    id: int
-    name: str
-    district_id: int
 
 
 class UserOptionPublic(BaseModel):
     """One entry in the login-page User ID dropdown. Role shown inline
-    so the operator knows which entry is theirs."""
+    so the operator can double-check they picked the right entry."""
     username: str
     role: str
+
+
+class PoliceStationPublic(BaseModel):
+    """Feeds the NCRP-entry Address tab's Police Station dropdown so
+    the CC operator always picks a value that resolves — no free-text
+    typos, no unanchored complaints."""
+    id: int
+    name: str
