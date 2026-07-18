@@ -16,12 +16,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import CurrentUser, get_current_user
+from config import settings
 from database import get_db
 from models.ncrp_data import NcrpData
 from models.ncrp_efir_answer import NcrpEfirAnswer
 from models.ncrp_suspect_account import NcrpSuspectAccount
 from models.ncrp_suspect_mobile import NcrpSuspectMobile
 from models.ncrp_transaction import NcrpTransaction
+from models.outbound_event import OutboundEvent
 from models.police_it_v2_act import PoliceITV2Act
 from models.police_it_v2_data import PoliceITV2Data, STATUS_VALUES
 from models.police_station import PoliceStation
@@ -32,9 +34,18 @@ from schemas.complaint import (
     NcrpEfirAnswerView,
     NcrpSuspectAccountView,
     NcrpTransactionView,
+    OutboundEventView,
 )
 from schemas.fir_entry import FirActView, FirDraftUpdate, FirEntryView
-from services.outbound import push_ncrp_data, push_police_it_v2_data
+from services.outbound import (
+    pull_notice_lien_from_ncrp,
+    push_complaint_to_ncrp,
+    push_crimac_transfer,
+    push_e_lost_transfer,
+    push_efir_detail_to_ncrp,
+    push_registered_fir_to_ncrp,
+    push_v2_intake,
+)
 
 
 router = APIRouter(prefix="/api/v1/complaints", tags=["complaints"])
@@ -371,13 +382,30 @@ async def submit_complaint(
     db: AsyncSession = Depends(get_db),
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Final Submit action — fires the two outbound APIs (placeholders
-    today) and advances status to SUBMITTED. The frontend calls this
-    AFTER a full Save so any pending edits are already persisted.
+    """Final Submit — the whole KarnatakazeroFIR flow in one call.
 
-    Blocks re-submit after the case has moved past IN_PROGRESS (a
-    transferred / registered / cancelled case can't be re-submitted;
-    dedicated state transitions land in Phase 1b.3)."""
+    Sequence (all placeholders today, real HTTP calls in Phase 1b.3):
+      1. Push complaint to NCRP (arrow 1).
+      2. Push intake to Police IT V2 (arrow 2).
+      3. Auto-decision — sum tx amounts vs FRAUD_THRESHOLD_INR.
+         a. Below → route to e-Lost Platform, status ROUTED_TO_E_LOST.
+         b. Above → fire arrows 3 + 4 (push eFIR detail, pull
+            notice/lien), then auto-decision on jurisdiction:
+               - poi_state == "Karnataka" → status
+                 TRANSFERRED_TO_JURISDICTION_PS.
+               - otherwise → arrow 5 (CRIMAC transfer),
+                 status TRANSFERRED_TO_CRIMAC.
+
+    Every outbound + inbound event lands in `outbound_events` so the
+    "Sent Messages" tab on the detail view can render the full
+    timeline with payload inspection.
+
+    Signature workflow + arrow 6 (registered FIR push) come in
+    Step C — a dedicated /record-signature endpoint.
+
+    Rejects with 409 if the case has moved past RECEIVED/IN_PROGRESS
+    (a transferred/registered/cancelled case can't be re-submitted).
+    """
     v2 = (
         await db.execute(
             select(PoliceITV2Data).where(PoliceITV2Data.acknowledgement_no == ack_no)
@@ -391,12 +419,56 @@ async def submit_complaint(
             detail=f"Cannot submit — complaint is in state '{v2.status}'.",
         )
 
-    # Both outbound placeholders — real HTTP calls land here in
-    # Phase 1b.3 when NCRP + V2 endpoints are up.
-    await push_ncrp_data(db, ack_no)
-    await push_police_it_v2_data(db, ack_no)
+    # ── Arrows 1 + 2 — initial outbound pushes. ───────────────────
+    await push_complaint_to_ncrp(db, ack_no)
+    await push_v2_intake(db, ack_no)
 
-    v2.status = "SUBMITTED"
+    # ── Auto-decision: threshold check ────────────────────────────
+    total_amount = (
+        await db.execute(
+            select(func.coalesce(func.sum(NcrpTransaction.amount), 0))
+            .where(NcrpTransaction.acknowledgement_no == ack_no)
+        )
+    ).scalar_one()
+    total_dec = Decimal(str(total_amount))
+    threshold = Decimal(str(settings.FRAUD_THRESHOLD_INR))
+    v2.total_fraud_amount = total_dec
+    v2.threshold_at_decision = threshold
+    v2.above_threshold = total_dec >= threshold
+
+    if not v2.above_threshold:
+        # Below threshold → e-Lost Platform, terminal for our flow.
+        await push_e_lost_transfer(db, ack_no)
+        v2.status = "ROUTED_TO_E_LOST"
+    else:
+        # Above threshold → the Zero-FIR-creation branch.
+        # Arrow 3: notify NCRP that eFIR is being created.
+        await push_efir_detail_to_ncrp(db, ack_no)
+        # Arrow 4: pull Notice + Lien records from NCRP.
+        await pull_notice_lien_from_ncrp(db, ack_no)
+        v2.status = "ZERO_FIR_CREATED"
+
+        # ── Auto-decision: jurisdiction check ─────────────────────
+        # poi_state is the incident state (falls back to the caller's
+        # address state if the operator didn't fill POI separately).
+        incident_state = (v2.poi_state or "").strip()
+        if not incident_state:
+            ncrp_row = (
+                await db.execute(
+                    select(NcrpData.address_state)
+                    .where(NcrpData.acknowledgement_no == ack_no)
+                )
+            ).scalar_one_or_none()
+            incident_state = (ncrp_row or "").strip()
+        within_ka = incident_state.lower() == "karnataka"
+        v2.within_karnataka_jurisdiction = within_ka
+
+        if within_ka:
+            v2.status = "TRANSFERRED_TO_JURISDICTION_PS"
+        else:
+            await push_crimac_transfer(db, ack_no)
+            v2.status = "TRANSFERRED_TO_CRIMAC"
+
     if v2.picked_up_by is None:
         v2.picked_up_by = user.user_id
         v2.picked_up_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
@@ -404,3 +476,39 @@ async def submit_complaint(
     await db.commit()
     await db.refresh(v2)
     return await _build_detail(db, v2)
+
+
+# ── Outbound events (the "Sent Messages" audit) ────────────────
+
+
+@router.get("/{ack_no}/outbound-events", response_model=List[OutboundEventView])
+async def list_outbound_events(
+    ack_no: str,
+    db: AsyncSession = Depends(get_db),
+    _user: CurrentUser = Depends(get_current_user),
+):
+    """Chronological log of every outbound / inbound integration event
+    for this complaint. Powers the "Sent Messages" tab on the detail
+    view. Ordered oldest-first so the reader watches the workflow
+    unfold top-to-bottom."""
+    rows = (
+        await db.execute(
+            select(OutboundEvent)
+            .where(OutboundEvent.acknowledgement_no == ack_no)
+            .order_by(OutboundEvent.created_at)
+        )
+    ).scalars().all()
+    return [
+        OutboundEventView(
+            id=r.id,
+            direction=r.direction,
+            target_system=r.target_system,
+            event_type=r.event_type,
+            status=r.status,
+            payload=r.payload,
+            response=r.response,
+            notes=r.notes,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]

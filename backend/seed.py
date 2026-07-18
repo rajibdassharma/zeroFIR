@@ -83,7 +83,20 @@ async def seed(fresh: bool):
 
     print(f"Dropping + recreating all tables in `{settings.DB_NAME}` ...")
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        # Drop EVERY table in the schema (not just those currently in
+        # Base.metadata) so orphaned tables from previous model shapes
+        # — e.g. an old `masked_applications` — don't block dropping
+        # tables they still FK on (like `users`). FK checks off during
+        # the sweep so cross-references never trip us up.
+        await conn.execute(text("SET FOREIGN_KEY_CHECKS = 0"))
+        table_names = (await conn.execute(text(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = :s"
+        ), {"s": settings.DB_NAME})).scalars().all()
+        for tname in table_names:
+            await conn.execute(text(f"DROP TABLE IF EXISTS `{tname}`"))
+        await conn.execute(text("SET FOREIGN_KEY_CHECKS = 1"))
+
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session() as session:

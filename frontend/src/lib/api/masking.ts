@@ -3,6 +3,7 @@ import type {
   ComplaintListItem,
   FirEntry,
   FirMasterDropdowns,
+  OutboundEvent,
 } from '../../types';
 import { apiFetch } from './client';
 
@@ -40,4 +41,12 @@ export function submitComplaint(ackNo: string) {
 
 export function getFirMasterDropdowns() {
   return apiFetch<FirMasterDropdowns>('/api/v1/fir-master/dropdowns/public');
+}
+
+/** Fetch the chronological Sent-Messages log for a complaint. Every
+ *  push / pull the backend fired (placeholder or real) appears here. */
+export function getOutboundEvents(ackNo: string) {
+  return apiFetch<OutboundEvent[]>(
+    `/api/v1/complaints/${encodeURIComponent(ackNo)}/outbound-events`,
+  );
 }

@@ -318,6 +318,19 @@ export interface NcrpComplaintPushResponse {
   duplicate: boolean;
 }
 
+// ── Outbound audit event (Sent Messages) ─────────────────────
+export interface OutboundEvent {
+  id: string;
+  direction: 'outbound' | 'inbound';
+  target_system: 'NCRP' | 'POLICE_IT_V2' | 'CRIMAC' | 'E_LOST';
+  event_type: string;                       // slug (see backend EVENT_TYPES)
+  status: 'placeholder' | 'success' | 'failed';
+  payload: unknown | null;
+  response: unknown | null;
+  notes: string | null;
+  created_at: string;                       // ISO datetime
+}
+
 // ── Session ───────────────────────────────────────────────────
 export interface SessionUser {
   user_id: number;

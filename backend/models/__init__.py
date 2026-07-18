@@ -20,6 +20,9 @@ from models.ncrp_efir_answer import NcrpEfirAnswer
 from models.police_it_v2_data import PoliceITV2Data
 from models.police_it_v2_act import PoliceITV2Act
 
+# ── Audit ────────────────────────────────────────────────────────
+from models.outbound_event import OutboundEvent
+
 __all__ = [
     "PoliceStation",
     "User",
@@ -30,4 +33,5 @@ __all__ = [
     "NcrpEfirAnswer",
     "PoliceITV2Data",
     "PoliceITV2Act",
+    "OutboundEvent",
 ]

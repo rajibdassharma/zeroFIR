@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     # prod, set this to a strong random value and rotate via .env.
     NCRP_API_KEY: str = ""
 
+    # ── Auto-decision thresholds ────────────────────────────────────
+    # If sum(ncrp_transactions.amount) >= this, the complaint qualifies
+    # for a Zero FIR (KarnatakazeroFIR deck, slide 8: "10 lakh or above").
+    # Below this, the complaint is routed to the e-Lost Platform.
+    # Configurable so the KA cyber-crime team can adjust without a code
+    # change if the policy shifts.
+    FRAUD_THRESHOLD_INR: int = 1_000_000
+
     class Config:
         env_prefix = "ZFIR_"
         env_file = ".env"

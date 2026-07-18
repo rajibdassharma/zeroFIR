@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List
+from typing import Any, List
 
 from pydantic import BaseModel
 
@@ -96,6 +96,21 @@ class NcrpDataView(BaseModel):
     suspect_accounts: List[NcrpSuspectAccountView] = []
     efir_answers: List[NcrpEfirAnswerView] = []
     received_at: datetime
+
+
+class OutboundEventView(BaseModel):
+    """One row of the Sent-Messages audit log. Rendered chronologically
+    on the detail page — payload / response are pretty-printed on
+    click so the operator can inspect the full envelope."""
+    id: str
+    direction: str          # 'outbound' | 'inbound'
+    target_system: str      # 'NCRP' | 'POLICE_IT_V2' | 'CRIMAC' | 'E_LOST'
+    event_type: str         # slug from EVENT_TYPES
+    status: str             # 'placeholder' | 'success' | 'failed'
+    payload: Any | None = None
+    response: Any | None = None
+    notes: str | None = None
+    created_at: datetime
 
 
 class ComplaintDetail(BaseModel):

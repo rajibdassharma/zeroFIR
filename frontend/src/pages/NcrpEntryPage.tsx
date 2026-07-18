@@ -27,7 +27,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { Save, Send } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Save, Send } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import {
   AddBtn, BoolRadio, NumField, RemBtn, Section, SelectField,
@@ -281,18 +281,89 @@ export function NcrpEntryPage() {
 
   // ── Save + Submit ────────────────────────────────────────────
   // Save Draft = persist 1930 + FIR fields, no outbound push,
-  //              status stays IN_PROGRESS. Come back later to edit.
+  //              status stays IN_PROGRESS. Requires only the bare
+  //              identifiers so a partial draft can be stored.
   // Submit     = persist + fire NCRP + Police IT V2 outbound
-  //              placeholders + advance status to SUBMITTED.
+  //              placeholders + advance status to SUBMITTED. Requires
+  //              every mandatory field across every tab.
 
-  const validateRequired = (): boolean => {
-    const jumpToNcrp = (t: NcrpTabKey) => { setPanel('ncrp'); setNcrpTab(t); };
-    if (!f.acknowledgement_no.trim()) { toast.error('Acknowledgement number is required'); jumpToNcrp('complainant_incident'); return false; }
-    if (!f.complainant.name.trim())   { toast.error('Complainant name is required');       jumpToNcrp('complainant_incident'); return false; }
-    if (!f.complainant.mobile.trim()) { toast.error('Complainant mobile is required');     jumpToNcrp('complainant_incident'); return false; }
-    if (!f.address.police_station)    { toast.error('Police Station is required');         jumpToNcrp('complainant_incident'); return false; }
+  const jumpTo = (panel: PanelKey, tab: TabKey) => {
+    setPanel(panel);
+    if (panel === 'ncrp') setNcrpTab(tab as NcrpTabKey);
+    else setFirTab(tab as FirTabKey);
+  };
+
+  /** Draft-time validation — just the bare identifiers so we can
+   *  persist without wiping the placeholder MA row. */
+  const validateDraft = (): boolean => {
+    if (!f.acknowledgement_no.trim()) { toast.error('Acknowledgement No is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.complainant.name.trim())   { toast.error('Complainant name is required');   jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.complainant.mobile.trim()) { toast.error('Complainant mobile is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.address.police_station)    { toast.error('Police Station is required');     jumpTo('ncrp', 'complainant_incident'); return false; }
     return true;
   };
+
+  /** Submit-time validation — every mandatory field across all six
+   *  tabs. Jumps to the first offending tab and shows a specific
+   *  toast so the operator knows exactly what's missing.
+   *
+   *  Kept in the same order as `_TAB_REQUIREMENTS` below so a change
+   *  in one place stays consistent with the tab-completion badges. */
+  const validateSubmit = (): boolean => {
+    // ── 1930 Fields → Complainant & Incident Details ─────────────
+    if (!f.acknowledgement_no.trim()) { toast.error('Acknowledgement No is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.complainant.name.trim())   { toast.error('Complainant Full Name is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.complainant.mobile.trim()) { toast.error('Complainant Mobile is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.complainant.dob)           { toast.error('Complainant Date of Birth is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.complainant.gender)        { toast.error('Complainant Gender is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.address.city)              { toast.error('Complainant Address — City/Village is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.address.state)             { toast.error('Complainant Address — State is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.address.district)          { toast.error('Complainant Address — District is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+    if (!f.address.police_station)    { toast.error('Complainant Address — Police Station is required'); jumpTo('ncrp', 'complainant_incident'); return false; }
+
+    // ── 1930 Fields → Transaction's Details ─────────────────────
+    const hasValidTxn = f.transactions.some((t) => t.amount != null && Number(t.amount) > 0);
+    if (!hasValidTxn) { toast.error('At least one transaction with a valid amount is required'); jumpTo('ncrp', 'transactions_details'); return false; }
+
+    // ── Additional Fields for FIR → Time of Occurrence ──────────
+    if (!fir.incident_from_at) { toast.error('Incident From date-time is required'); jumpTo('fir', 'time'); return false; }
+    if (!fir.incident_to_at)   { toast.error('Incident To date-time is required'); jumpTo('fir', 'time'); return false; }
+
+    // ── Additional Fields for FIR → Place of Incident ───────────
+    if (!fir.poi_city)           { toast.error('Place of Incident — City is required'); jumpTo('fir', 'place'); return false; }
+    if (!fir.poi_district)       { toast.error('Place of Incident — District is required'); jumpTo('fir', 'place'); return false; }
+    if (!fir.poi_state)          { toast.error('Place of Incident — State is required'); jumpTo('fir', 'place'); return false; }
+    if (!fir.poi_police_station) { toast.error('Place of Incident — Police Station is required'); jumpTo('fir', 'place'); return false; }
+
+    // ── Additional Fields for FIR → Additional Info for FIR ─────
+    if (!fir.comp_aadhaar_ref_no) { toast.error('Aadhaar Reference No is required'); jumpTo('fir', 'fir_additional'); return false; }
+
+    return true;
+  };
+
+  /** Which tabs have all their submit-time required fields filled.
+   *  Powers the check-mark badges on the sidebar + top-tab pills. */
+  const tabStatus = useMemo(() => ({
+    complainant_incident: !!(
+      f.acknowledgement_no.trim() && f.complainant.name.trim() &&
+      f.complainant.mobile.trim() && f.complainant.dob &&
+      f.complainant.gender && f.address.city && f.address.state &&
+      f.address.district && f.address.police_station
+    ),
+    transactions_details: f.transactions.some(
+      (t) => t.amount != null && Number(t.amount) > 0,
+    ),
+    acts: true,   // no hard-required fields at intake time
+    time: !!(fir.incident_from_at && fir.incident_to_at),
+    place: !!(
+      fir.poi_city && fir.poi_state && fir.poi_district && fir.poi_police_station
+    ),
+    fir_additional: !!fir.comp_aadhaar_ref_no,
+  } as Record<TabKey, boolean>), [f, fir]);
+
+  const ncrpComplete = tabStatus.complainant_incident && tabStatus.transactions_details;
+  const firComplete = tabStatus.acts && tabStatus.time && tabStatus.place && tabStatus.fir_additional;
+  const allComplete = ncrpComplete && firComplete;
 
   /** Chase writes together — POST/PATCH the 1930 fields then PATCH
    *  the V2 draft. Returns the ack_no + whether V2 got persisted. */
@@ -307,7 +378,7 @@ export function NcrpEntryPage() {
   };
 
   const handleSaveDraft = async () => {
-    if (!validateRequired()) return;
+    if (!validateDraft()) return;
     setSaving(true);
     try {
       const res = await persistAll();
@@ -327,7 +398,7 @@ export function NcrpEntryPage() {
   };
 
   const handleSubmit = async () => {
-    if (!validateRequired()) return;
+    if (!validateSubmit()) return;
     setSaving(true);
     try {
       const res = await persistAll();
@@ -388,21 +459,32 @@ export function NcrpEntryPage() {
     return <AppShell><div className="text-center py-10 italic">Loading…</div></AppShell>;
   }
 
+  // Little green ✓ / amber ! that tells the operator whether a tab
+  // (or a whole panel) has captured every submit-time required field.
+  const StatusDot = ({ complete }: { complete: boolean }) => (
+    complete
+      ? <CheckCircle2 className="w-4 h-4" style={{ color: '#0a6b28' }} />
+      : <AlertCircle  className="w-4 h-4" style={{ color: '#b47500' }} />
+  );
+
   // ── Left-sidebar panel link + top horizontal tab pill ────────
-  const PanelLink = ({ p, label }: { p: PanelKey; label: string }) => (
+  const PanelLink = ({ p, label, complete }: {
+    p: PanelKey; label: string; complete: boolean;
+  }) => (
     <button type="button" onClick={() => setPanel(p)}
-      className="text-left px-3 py-2.5 rounded-lg text-sm font-semibold transition w-full"
+      className="flex items-center justify-between w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold transition"
       style={{
         background: panel === p ? 'var(--ksp-navy)' : 'transparent',
         color: panel === p ? 'var(--ksp-yellow)' : 'var(--ksp-navy)',
       }}>
-      {label}
+      <span>{label}</span>
+      <StatusDot complete={complete} />
     </button>
   );
 
-  // Numbered-pill top tab in the CyberFraud style.
-  const TopTab = ({ i, label, active, onClick }: {
-    i: number; label: string; active: boolean; onClick: () => void;
+  // Numbered-pill top tab in the CyberFraud style + completion dot.
+  const TopTab = ({ i, label, active, complete, onClick }: {
+    i: number; label: string; active: boolean; complete: boolean; onClick: () => void;
   }) => (
     <button type="button" onClick={onClick}
       className="px-4 py-2 text-sm font-semibold rounded-xl transition"
@@ -420,6 +502,7 @@ export function NcrpEntryPage() {
           {i}
         </span>
         {label}
+        <StatusDot complete={complete} />
       </span>
     </button>
   );
@@ -444,18 +527,43 @@ export function NcrpEntryPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-4">
           {/* ═════ Left sidebar ═════ */}
           <aside
-            className="rounded-2xl p-3 h-fit sticky top-4"
+            className="rounded-2xl p-3 h-fit sticky top-4 space-y-4"
             style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 6px 16px rgba(0,0,0,0.08)' }}
           >
-            <div className="text-xs uppercase font-bold mb-2 px-2 tracking-wide opacity-60">
-              Sections
+            <div>
+              <div className="text-xs uppercase font-bold mb-2 px-2 tracking-wide opacity-60">
+                Sections
+              </div>
+              <div className="space-y-1">
+                <PanelLink p="ncrp" label="1930 Fields" complete={ncrpComplete} />
+                <PanelLink p="fir"  label="Additional Fields for FIR" complete={firComplete} />
+              </div>
             </div>
-            <div className="space-y-1">
-              <PanelLink p="ncrp" label="1930 Fields" />
-              <PanelLink p="fir"  label="Additional Fields for FIR" />
+
+            {/* Submit lives here (moved from bottom bar) so it's
+                always visible without scrolling. Only enabled when
+                every tab has captured its mandatory fields — on
+                click we still run validateSubmit() as a defence-in-
+                depth check + to surface the specific missing field. */}
+            <div className="pt-3 border-t space-y-2" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+              <div className="text-xs px-2" style={{ color: allComplete ? '#0a6b28' : 'var(--ksp-red)' }}>
+                {allComplete
+                  ? 'All tabs complete — ready to submit.'
+                  : 'Complete every tab (green ✓) before submitting.'}
+              </div>
+              <button type="button" onClick={handleSubmit} disabled={saving}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-bold rounded-xl transition disabled:opacity-50"
+                style={{
+                  background: allComplete ? 'var(--ksp-yellow)' : 'rgba(255,212,0,0.35)',
+                  color: '#000',
+                  border: '2px solid rgba(0,0,0,0.25)',
+                }}>
+                <Send className="w-4 h-4" />
+                {saving ? 'Submitting…' : 'Submit Complaint'}
+              </button>
             </div>
           </aside>
 
@@ -468,11 +576,13 @@ export function NcrpEntryPage() {
                 ? NCRP_TABS.map((t, i) => (
                     <TopTab key={t.key} i={i + 1} label={t.label}
                       active={ncrpTab === t.key}
+                      complete={tabStatus[t.key]}
                       onClick={() => setNcrpTab(t.key)} />
                   ))
                 : FIR_TABS.map((t, i) => (
                     <TopTab key={t.key} i={i + 1} label={t.label}
                       active={firTab === t.key}
+                      complete={tabStatus[t.key]}
                       onClick={() => setFirTab(t.key)} />
                   ))
               }
@@ -938,9 +1048,10 @@ export function NcrpEntryPage() {
             )}
 
             {/* ═════ Save bar ═════
-                Save Draft persists both 1930 + FIR fields without
-                firing the outbound APIs. Submit fires the NCRP + V2
-                pushes (placeholders today) and advances status. */}
+                Only Save Draft + Cancel live here now. Submit
+                Complaint moved to the left sidebar so it stays
+                visible without scrolling and reads the tab-completion
+                state at a glance. */}
             <div className="flex items-center justify-end gap-3 mt-6">
               <button type="button" onClick={() => navigate('/complaints')}
                 className="px-4 py-2 text-sm font-semibold rounded-xl"
@@ -952,12 +1063,6 @@ export function NcrpEntryPage() {
                 style={{ background: '#fff', color: 'var(--ksp-navy)', border: '2px solid var(--ksp-navy)' }}>
                 <Save className="w-4 h-4" />
                 {saving ? 'Saving…' : 'Save Draft'}
-              </button>
-              <button type="button" onClick={handleSubmit} disabled={saving}
-                className="flex items-center gap-2 px-6 py-2.5 font-bold rounded-xl transition disabled:opacity-50"
-                style={{ background: 'var(--ksp-yellow)', color: '#000', border: '2px solid rgba(0,0,0,0.25)' }}>
-                <Send className="w-4 h-4" />
-                {saving ? 'Submitting…' : 'Submit Complaint'}
               </button>
             </div>
           </div>
